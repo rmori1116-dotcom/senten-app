@@ -93,7 +93,7 @@
     color:#fff; padding:9px 18px; border-radius:20px; font-size:14px; z-index:200; display:none; max-width:90%; }
   .help p { font-size:13px; line-height:1.7; margin-bottom:8px; }
   .help h3 { font-size:14px; margin:12px 0 4px; color:#1e3a5f; }
-  #fileTiff, #fileJson { display:none; }
+  #fileTiff, #fileJson, #fileImport { display:none; }
   .badge { background:#1e73d2; color:#fff; border-radius:10px; font-size:10px; padding:1px 7px; margin-left:6px; }
   .badge.warn { background:#c9741a; }
   #alertBar { display:none; background:#b3261e; color:#fff; font-size:12px; padding:7px 10px; line-height:1.4; z-index:11; }
@@ -102,13 +102,17 @@
     padding:8px 16px; border-radius:20px; font-size:13px; z-index:6; display:none; text-align:center; line-height:1.5; }
   #fixBar .sub { display:block; font-size:11px; opacity:.8; }
   .dup { color:#b3261e; font-weight:bold; }
+  .segRow { display:flex; gap:8px; margin-bottom:12px; }
+  .seg { flex:1; border:1px solid #bbb; background:#fff; color:#444; border-radius:8px; padding:10px 6px; font-size:13px; }
+  .seg.on { background:#1e73d2; border-color:#1e73d2; color:#fff; font-weight:bold; }
+  .swatch { width:14px; height:14px; border-radius:3px; flex:none; border:1px solid rgba(0,0,0,.25); }
   .noteBox { background:#fff8e6; border:1px solid #e6d3a3; border-radius:6px; padding:8px 10px; font-size:12px; color:#6b5320; margin-bottom:10px; line-height:1.6; }
 </style>
 </head>
 <body>
 <div id="app">
   <header>
-    <span class="title">選点支援 <small style="font-weight:normal;opacity:.7">v3.0</small></span>
+    <span class="title">選点支援 <small style="font-weight:normal;opacity:.7">v3.1</small></span>
     <span id="modeLabel" style="font-size:11px;background:rgba(255,255,255,.18);padding:2px 8px;border-radius:9px;">閲覧</span>
     <span id="dateBadge" style="display:none;font-size:10px;background:#c9741a;padding:2px 7px;border-radius:9px;"></span>
     <span id="offlineBadge" style="display:none;font-size:10px;background:#555;padding:2px 7px;border-radius:9px;">オフライン</span>
@@ -145,8 +149,9 @@
   <button class="menuItem" onclick="openStakes()">🪧 杭種の設定<span class="sub" id="stakeSummary"></span></button>
   <button class="menuItem" onclick="openSettings()">⚙️ 設定</button>
   <button class="menuItem" onclick="exportSimaToday()">💾 SIMA出力（本日分）<span class="sub" id="todayCount"></span></button>
-  <button class="menuItem" onclick="openDateExport()">📅 SIMA出力（日付を選択）</button>
-  <button class="menuItem" onclick="exportSimaAll()">🗃 SIMA出力（全件）</button>
+  <button class="menuItem" onclick="exportCsvToday()">📄 CSV出力（本日分）<span class="sub" id="todayCountCsv"></span></button>
+  <button class="menuItem" onclick="openDateExport()">📤 出力（日付・形式を選ぶ）<span class="sub">SIMA / CSV、日付ごと・全件を選んで出力します</span></button>
+  <button class="menuItem" onclick="document.getElementById('fileImport').click()">📥 SIMA / CSV 取込<span class="sub" id="importHint">既知点・既設点をレイヤとして地図に重ねます（出力には含まれません）</span></button>
   <button class="menuItem" onclick="exportJson()">📤 バックアップ保存（JSON）<span class="sub" id="backupHint"></span></button>
   <button class="menuItem" onclick="document.getElementById('fileJson').click()">📥 バックアップ読込（JSON）</button>
   <button class="menuItem" onclick="openSnapshots()">🕘 自動バックアップから復元<span class="sub" id="snapHint">端末内に自動保存された世代から戻せます</span></button>
@@ -173,6 +178,8 @@
   </select></div>
   <p style="font-size:11px;color:#888;margin-bottom:8px;">「現在地で登録」を押してから指定秒数のあいだ測位を続け、精度で重み付けした平均値を登録します。ばらつきが減り、標準偏差も記録されます。途中で中止できます。</p>
   <div class="formRow"><label>精度の警告値</label><input id="setAccWarn" type="number" min="0" step="0.5"><span style="color:#888;font-size:12px;">m</span></div>
+  <div class="formRow"><label>CSVの属性列</label><input id="setCsvAttr" placeholder="12,1.0,1,1"></div>
+  <p style="font-size:11px;color:#888;margin-bottom:8px;">CSV出力の5列目に入る値です。お使いのソフトの図式コードに合わせてください（初期値は 12,1.0,1,1）。</p>
   <div class="formRow"><label>座標系（系番号）</label><select id="setZone"></select></div>
   <p style="font-size:11px;color:#888;margin-bottom:8px;">座標系はGeoTIFFにEPSGコードが含まれる場合は自動判別されます。ここでの指定はEPSGが読み取れない場合に使用されます。</p>
   <div class="formRow"><label>図面の色の解釈</label><select id="setColorMode">
@@ -224,16 +231,34 @@
   </div>
   <h3 style="font-size:13px;margin:6px 0;color:#1e3a5f;">日付ごとの点</h3>
   <div id="dateLayers"></div>
+  <h3 style="font-size:13px;margin:12px 0 6px;color:#1e3a5f;">取込データ</h3>
+  <div id="importLayers"></div>
   <h3 style="font-size:13px;margin:12px 0 6px;color:#1e3a5f;">その他</h3>
   <div id="otherLayers"></div>
-  <p style="font-size:11px;color:#888;margin-top:10px;">非表示の点は地図に表示されず、結線でのタップ選択もできません。SIMA出力は表示状態に関わらず、指定した日付の点が出力されます。</p>
+  <p style="font-size:11px;color:#888;margin-top:10px;">非表示の点は地図に表示されず、結線でのタップ選択もできません。SIMA・CSV出力は表示状態に関わらず、指定した日付の点が出力されます。<b>取込データは出力に含まれません。</b></p>
 </div></div>
 
-<!-- 日付別SIMA出力 -->
+<!-- 出力（形式・日付を選ぶ） -->
 <div class="panel" id="datePanel"><div class="sheet">
-  <h2>SIMA出力（日付を選択）<button class="close" onclick="closePanel('datePanel')">✕</button></h2>
+  <h2>出力<button class="close" onclick="closePanel('datePanel')">✕</button></h2>
+  <div class="segRow" id="fmtSeg">
+    <button class="seg" data-fmt="sima" onclick="setExportFmt('sima')">SIMA形式（.sim）</button>
+    <button class="seg" data-fmt="csv" onclick="setExportFmt('csv')">CSV形式（.csv）</button>
+  </div>
   <div id="dateExportList"></div>
-  <p style="font-size:11px;color:#888;margin-top:8px;">座標データのみを出力します（路線は含みません）。</p>
+  <p style="font-size:11px;color:#888;margin-top:8px;" id="fmtNote"></p>
+</div></div>
+
+<!-- 取込レイヤ名の入力 -->
+<div class="panel" id="importPanel"><div class="sheet">
+  <h2>取込データの確認<button class="close" onclick="closePanel('importPanel')">✕</button></h2>
+  <div id="importPreview"></div>
+  <div class="formRow"><label>レイヤ名</label><input id="impName" placeholder="例: 既知点"></div>
+  <p style="font-size:11px;color:#888;margin-bottom:8px;">取り込んだ点は地図に重ねて表示され、結線の相手として選べます。<b>SIMA・CSVの出力には含まれません</b>（既知点を二重に渡す事故を防ぐため）。不要になったらレイヤごと削除できます。</p>
+  <div style="display:flex;gap:8px;">
+    <button class="saveBtn" style="margin:0;" onclick="commitImport()">この内容で取り込む</button>
+    <button class="saveBtn" style="margin:0;background:#eee;color:#333;" onclick="closePanel('importPanel')">やめる</button>
+  </div>
 </div></div>
 
 <!-- 一覧 -->
@@ -244,6 +269,8 @@
   <div id="pointList"></div>
   <h3 style="font-size:14px;margin:14px 0 4px;">路線 <span class="badge" id="rtCount"></span></h3>
   <div id="routeList"></div>
+  <h3 style="font-size:14px;margin:14px 0 4px;">取込データ <span class="badge" id="impCount"></span></h3>
+  <div id="importList"></div>
   <h3 style="font-size:14px;margin:14px 0 4px;">手書きメモ</h3>
   <div class="listRow"><span id="strokeCount" style="flex:1"></span><button class="del" onclick="clearStrokes()">全消去</button></div>
 </div></div>
@@ -269,15 +296,21 @@
   <p>表示は倍率に応じて自動調整されます。拡大するほど図面を細かい解像度で読み直して鮮明に表示し、縮小時は粗い解像度で軽快に表示します（QGISと同じ方式）。右側の「原寸×○」は図面の元解像度に対する倍率です。原寸を大きく超えると図面自体の情報量の上限に達するため、これ以上細かくは表示できません（位置精度には影響しません）。</p>
   <h3>メモ</h3>
   <p>「メモ」モードで地図上にフリーハンド描画できます。2本指で地図の移動・拡大縮小、消しゴムで線を削除します。</p>
-  <h3>作業日とSIMA出力</h3>
-  <p>登録した点には端末の日付が作業日として自動記録され、日単位で出力できます。出力は座標データのみ（X, Y、標高は空欄）で、路線は含みません。文字コードはShift-JISです。</p>
-  <p>メニューの出力は3種類です。「本日分」はワンタップで当日の点のみ、「日付を選択」は登録日の一覧から選んで出力、「全件」は全ての点を出力します。ファイル名は作業日が入ります（例: 選点_2026-07-31.sim）。</p>
+  <h3>取込データ（既知点・既設点の読み込み）</h3>
+  <p>メニューの「SIMA / CSV 取込」で、既存のSIMAファイル（.sim）やCSVを読み込み、<b>取込レイヤ</b>として地図に重ねられます。既知点や前回の選点を見ながら作業できます。</p>
+  <p>取り込んだ点は紫や緑の<b>ひし形</b>で表示され、自分で登録した点（丸）と一目で区別できます。レイヤごとに色が変わり、レイヤ表示から表示/非表示・表示範囲へ移動・削除ができます。</p>
+  <p><b>取込点はSIMA・CSVの出力には含まれません。</b>既知点を成果に二重に混ぜてしまう事故を防ぐためです。ただし結線の相手としては選べるので、既知点と新点を結ぶ路線が作れます。</p>
+  <p>取込時に、読み取れた点数と座標の範囲が表示されます。開いている図面の範囲から完全に外れている場合は警告が出ます（系番号の違いや、X・Yの並びが逆のファイルを読んだ場合です）。</p>
+  <h3>作業日とSIMA・CSV出力</h3>
+  <p>登録した点には端末の日付が作業日として自動記録され、日単位で出力できます。路線は含みません。文字コードはSIMA・CSVともShift-JISです。</p>
+  <p>メニューの「SIMA出力（本日分）」「CSV出力（本日分）」はワンタップで当日の点だけを出します。「出力（日付・形式を選ぶ）」では、形式（SIMA / CSV）を切り替えたうえで、登録日ごと・全件を選べます。ファイル名には作業日が入ります（例: 選点_2026-07-31.sim / 選点_2026-07-31.csv）。</p>
+  <p>CSVの列は「点名, X（北）, Y（東）, Z, 属性, 杭種」です。Zは標高で、記録していないため0になります。属性列の値は設定で変更できます（初期値は 12,1.0,1,1）。</p>
   <p>作業日は一覧の日付欄で変更できます（日付をまたぐ夜間作業や、端末の日付設定ミスの修正用）。</p>
   <h3>レイヤ表示</h3>
-  <p>メニューの「レイヤ表示」で、日付ごとの点、路線、手書きメモ、背景図をそれぞれ表示/非表示にできます。「全表示」「本日のみ」のボタンで一括切替も可能です。</p>
+  <p>メニューの「レイヤ表示」で、日付ごとの点、取込データ、路線、手書きメモ、背景図をそれぞれ表示/非表示にできます。「全表示」「本日のみ」のボタンで一括切替も可能です。</p>
   <p>本日の点は赤、過去日の点は灰色で表示されます。非表示にした点は地図に出ず、結線でのタップ選択もできません。</p>
   <h3>データ保持</h3>
-  <p>点・路線・メモ・杭種・設定は端末内（IndexedDB）に自動保存されます（GeoTIFFは毎回読込が必要）。保存に失敗した場合は画面上部に赤い帯で警告が出ますので、その場でJSONバックアップを保存してください。</p>
+  <p>点・路線・メモ・取込データ・杭種・設定は端末内（IndexedDB）に自動保存されます（GeoTIFFは毎回読込が必要）。保存に失敗した場合は画面上部に赤い帯で警告が出ますので、その場でJSONバックアップを保存してください。</p>
   <p>変更のたびに端末内へ自動バックアップが残ります（最新10世代＋日付ごとの初回）。メニューの「自動バックアップから復元」でいつでも戻せます。ただしこれも同じ端末内の控えですので、機種変更・共有・端末故障に備えて、作業終了時にはJSONバックアップを端末外へ保存してください。7日以上JSONを保存していない場合はメニューに注意が表示されます。</p>
   <p>メニューの「保存状態の確認」で、保存方式・使用量・永続化の可否を確認できます。iPhone / iPad の Safari は、しばらく使わないサイトの保存データを自動削除することがあります。ホーム画面に追加して使うとこの削除を受けにくくなります。</p>
   <h3>オフラインでの利用</h3>
@@ -299,20 +332,24 @@
 
 <input type="file" id="fileTiff">
 <input type="file" id="fileJson">
+<input type="file" id="fileImport">
 <div id="toast"></div>
 
 <script>
 'use strict';
 /* ================= 状態 ================= */
-const APP_VERSION = 'v3.0';
+const APP_VERSION = 'v3.1';
 const DEFAULT_SETTINGS = { prefix:'A', nextNum:1, nextRoute:1, zone:9, mockGps:false, colorMode:'auto',
-              stake:'<なし>', stakes:null, mockDate:null, avgSec:3, accWarn:10, lastExport:null };
+              stake:'<なし>', stakes:null, mockDate:null, avgSec:3, accWarn:10, lastExport:null,
+              csvAttr:'12,1.0,1,1      ' };
 const store = {
   points: [],   // {id, name, x(東), y(北), acc, ts, date:'YYYY-MM-DD', stake:'杭種名', n?, sd?}
   routes: [],   // {id, name, pointIds:[]}
   strokes: [],  // {color, w(map単位), pts:[[x,y],...]}
+  imports: [],  // 取込レイヤ {id, name, src:'sima'|'csv', ts, color}
+  refPoints:[], // 取込点（参照専用・出力には含めない） {id, impId, name, x(東), y(北), z, stake, attr}
   settings: Object.assign({}, DEFAULT_SETTINGS),
-  layers: { hiddenDates:[], routes:true, memo:true, base:true }
+  layers: { hiddenDates:[], routes:true, memo:true, base:true, hiddenImports:[] }
 };
 const state = {
   mode:'view', follow:true,
@@ -370,6 +407,25 @@ function datesInUse(){ return [...new Set(store.points.map(pointDate))].sort().r
 function pointsOfDate(ds){ return store.points.filter(p=>pointDate(p)===ds); }
 function isDateVisible(ds){ return !(store.layers.hiddenDates||[]).includes(ds); }
 function isPointVisible(p){ return isDateVisible(pointDate(p)); }
+
+/* ================= 取込データ（参照専用レイヤ） =================
+   既知点・既設点をSIMA/CSVから読み込み、レイヤとして地図に重ねる。
+   自分で登録した点(store.points)とは別配列に持ち、出力には一切含めない。 */
+const IMPORT_COLORS=['#7b1fa2','#00695c','#e65100','#283593','#5d4037','#ad1457'];
+function importById(id){ return store.imports.find(i=>i.id===id); }
+function isImportVisible(id){ return !(store.layers.hiddenImports||[]).includes(id); }
+function refPointsOf(id){ return store.refPoints.filter(p=>p.impId===id); }
+function isRefVisible(p){ return isImportVisible(p.impId); }
+function visibleRefPoints(){ return store.refPoints.filter(isRefVisible); }
+function importColor(id){ const i=importById(id); return (i&&i.color)||'#7b1fa2'; }
+/* 結線では自分の点と取込点の両方を相手にできる（路線は出力に含まれないため安全） */
+function allPointsMap(){
+  const m=Object.create(null);
+  for(const p of store.points) m[p.id]=p;
+  for(const p of store.refPoints) m[p.id]=p;
+  return m;
+}
+function isAnyPointVisible(p){ return p.impId ? isRefVisible(p) : isPointVisible(p); }
 
 /* ================= 座標系 ================= */
 const ZONES = [
@@ -533,6 +589,7 @@ function applyLoaded(d){
   Object.assign(store.settings, d.settings||{});
   Object.assign(store.layers, d.layers||{});
   store.points=d.points||[]; store.routes=d.routes||[]; store.strokes=d.strokes||[];
+  store.imports=d.imports||[]; store.refPoints=d.refPoints||[];
   store.points.forEach(p=>{ if(!p.date) p.date=pointDate(p); });
 }
 async function load(){
@@ -610,7 +667,7 @@ async function showStorageInfo(){
     +`使用量: ${usage}\n`
     +`自動バックアップ: ${snaps}世代\n`
     +`最後のJSONバックアップ: ${le?le:'まだ保存していません'}\n`
-    +`データ量: 点${store.points.length} / 路線${store.routes.length} / メモ${store.strokes.length}\n\n`
+    +`データ量: 点${store.points.length} / 路線${store.routes.length} / メモ${store.strokes.length} / 取込${store.refPoints.length}\n\n`
     +'※端末内の保存は端末の故障・初期化で失われます。作業終了時にJSONバックアップを端末外へ保存してください。');
 }
 function daysSince(ds){
@@ -674,10 +731,10 @@ function draw(){
     ctx.stroke();
   }
   // 路線
-  const pmap = Object.fromEntries(store.points.map(p=>[p.id,p]));
+  const pmap = allPointsMap();
   if(store.layers.routes!==false) for(const r of store.routes){
     const pts = r.pointIds.map(id=>pmap[id]).filter(Boolean);
-    if(pts.length<2 || !pts.every(isPointVisible)) continue;
+    if(pts.length<2 || !pts.every(isAnyPointVisible)) continue;
     ctx.strokeStyle='#1e73d2'; ctx.lineWidth=3; ctx.setLineDash([]);
     ctx.beginPath();
     pts.forEach((p,i)=>{ const [x,y]=toScr(p.x,p.y); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
@@ -696,6 +753,18 @@ function draw(){
     for(const p of pts){ const [x,y]=toScr(p.x,p.y);
       ctx.strokeStyle='#ff8c00'; ctx.lineWidth=3;
       ctx.beginPath(); ctx.arc(x,y,11,0,7); ctx.stroke(); }
+  }
+  // 取込点（レイヤ色のひし形。自分で登録した点と一目で区別できるようにする）
+  for(const p of store.refPoints){
+    if(!isRefVisible(p)) continue;
+    const [x,y]=toScr(p.x,p.y);
+    if(x<-30||x>W+30||y<-30||y>H+30) continue;
+    const col=importColor(p.impId);
+    ctx.fillStyle=col; ctx.strokeStyle='#fff'; ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(x,y-6.5); ctx.lineTo(x+6.5,y); ctx.lineTo(x,y+6.5); ctx.lineTo(x-6.5,y);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    label(x, y-12, p.name, col);
   }
   // 点（本日は赤、過去日は灰色）
   const today=todayStr();
@@ -1101,8 +1170,8 @@ function onTap(sx,sy){
 }
 function nearestPoint(sx,sy,thr){
   let best=null, bd=thr;
-  for(const p of store.points){
-    if(!isPointVisible(p)) continue;
+  for(const p of store.points.concat(visibleRefPoints())){
+    if(!isAnyPointVisible(p)) continue;
     const [x,y]=toScr(p.x,p.y);
     const d=Math.hypot(x-sx,y-sy);
     if(d<bd){ bd=d; best=p; }
@@ -1111,10 +1180,10 @@ function nearestPoint(sx,sy,thr){
 }
 function routeAt(sx,sy,thr){
   if(store.layers.routes===false) return null;
-  const pmap = Object.fromEntries(store.points.map(p=>[p.id,p]));
+  const pmap = allPointsMap();
   for(const r of store.routes){
     const pts = r.pointIds.map(id=>pmap[id]).filter(Boolean);
-    if(!pts.every(isPointVisible)) continue;
+    if(!pts.every(isAnyPointVisible)) continue;
     for(let i=0;i<pts.length-1;i++){
       const a=toScr(pts[i].x,pts[i].y), b=toScr(pts[i+1].x,pts[i+1].y);
       if(distToSeg(sx,sy,a,b)<thr) return r;
@@ -1642,6 +1711,17 @@ function openLayers(){
         ${dateLabel(ds)}</span>
       <span class="coords">${n}点</span></div>`;
   }).join('') : '<p style="color:#888;font-size:13px;">点がありません</p>';
+  document.getElementById('importLayers').innerHTML = store.imports.length ? store.imports.map(imp=>{
+    const on=isImportVisible(imp.id), n=refPointsOf(imp.id).length;
+    return `<div class="listRow">
+      <button class="del" style="background:${on?'#e7f0fb':'#f0f0f0'};color:${on?'#1e73d2':'#999'};min-width:52px;"
+        onclick="toggleImportLayer('${imp.id}')">${on?'表示':'非表示'}</button>
+      <span class="swatch" style="background:${imp.color}"></span>
+      <span style="flex:1">${esc(imp.name)}</span>
+      <span class="coords">${n}点</span>
+      <button class="del" onclick="fitToImport('${imp.id}')" title="表示範囲へ移動">⤢</button>
+      <button class="del" onclick="delImport('${imp.id}')">削除</button></div>`;
+  }).join('') : '<p style="color:#888;font-size:13px;">取込データはありません（メニューの「SIMA / CSV 取込」から追加できます）</p>';
   const rows=[
     ['routes','路線', store.routes.length+'本'],
     ['memo','手書きメモ', store.strokes.length+'本'],
@@ -1662,12 +1742,18 @@ function toggleDateLayer(ds){
   if(i>=0) h.splice(i,1); else h.push(ds);
   save(); openLayers(); draw(); updateLayerSummary();
 }
+function toggleImportLayer(id){
+  const h=store.layers.hiddenImports||(store.layers.hiddenImports=[]);
+  const i=h.indexOf(id);
+  if(i>=0) h.splice(i,1); else h.push(id);
+  save(); openLayers(); draw(); updateLayerSummary();
+}
 function toggleLayer(k){
   store.layers[k]=store.layers[k]===false;
   save(); openLayers(); draw(); updateLayerSummary();
 }
 function showAllLayers(){
-  store.layers.hiddenDates=[];
+  store.layers.hiddenDates=[]; store.layers.hiddenImports=[];
   store.layers.routes=true; store.layers.memo=true; store.layers.base=true;
   save(); openLayers(); draw(); updateLayerSummary();
   toast('すべて表示にしました');
@@ -1686,8 +1772,11 @@ function updateLayerSummary(){
   if(store.layers.routes===false) off.push('路線');
   if(store.layers.memo===false) off.push('メモ');
   if(store.layers.base===false) off.push('背景図');
+  const hidImp=(store.layers.hiddenImports||[]).filter(i=>importById(i)).length;
   el.textContent = `${dates.length}日分`
+    + (store.imports.length?` / 取込${store.imports.length}件`:'')
     + (hidden.length?` / ${hidden.length}日を非表示`:'')
+    + (hidImp?` / 取込${hidImp}件を非表示`:'')
     + (off.length?` / ${off.join('・')}非表示`:'');
 }
 
@@ -1719,7 +1808,7 @@ function openList(){
         color:${ds===today?'#b71c1c':'#666c74'};border-bottom:1px solid #ddd;padding-bottom:2px;">
         ${dateLabel(ds)}　${pointsOfDate(ds).length}点${isDateVisible(ds)?'':'　【非表示】'}</div>${rows}`;
   }).join('') : '<p style="color:#888;font-size:13px;">点がありません</p>';
-  const pmap=Object.fromEntries(store.points.map(p=>[p.id,p]));
+  const pmap=allPointsMap();
   document.getElementById('routeList').innerHTML = store.routes.map(r=>
     `<div class="listRow">
       <input value="${esc(r.name)}" onchange="renameRoute('${r.id}',this.value)" style="max-width:90px;">
@@ -1733,6 +1822,17 @@ function openList(){
     dupBox.innerHTML=list.length
       ? `⚠ 点名が重複しています: <b>${esc(list.join('、'))}</b><br>SIMA出力の前に修正してください。`:'';
   }
+  document.getElementById('importList').innerHTML = store.imports.length ? store.imports.map(imp=>{
+    const pts=refPointsOf(imp.id);
+    const names=pts.slice(0,8).map(p=>esc(p.name)).join('、')+(pts.length>8?` ほか${pts.length-8}点`:'');
+    return `<div class="listRow">
+      <span class="swatch" style="background:${imp.color}"></span>
+      <span style="flex:1"><b>${esc(imp.name)}</b>
+        <span class="coords" style="display:block;white-space:normal;">${names}</span></span>
+      <span class="coords">${pts.length}点<br>${imp.src==='sima'?'SIMA':'CSV'}</span>
+      <button class="del" onclick="delImport('${imp.id}')">削除</button></div>`;
+  }).join('') : '<p style="color:#888;font-size:13px;">取込データはありません</p>';
+  document.getElementById('impCount').textContent=store.refPoints.length;
   document.getElementById('ptCount').textContent=store.points.length;
   document.getElementById('rtCount').textContent=store.routes.length;
   document.getElementById('strokeCount').textContent=`${store.strokes.length} 本の線`;
@@ -1794,6 +1894,12 @@ function updateListCount(){
   document.getElementById('listCount').textContent=`点 ${store.points.length} / 路線 ${store.routes.length}`;
   const t=document.getElementById('todayCount');
   if(t) t.textContent=`${dateLabel(todayStr())} ${pointsOfDate(todayStr()).length}点　→ 選点_${todayStr()}.sim`;
+  const tc=document.getElementById('todayCountCsv');
+  if(tc) tc.textContent=`${dateLabel(todayStr())} ${pointsOfDate(todayStr()).length}点　→ 選点_${todayStr()}.csv`;
+  const ih=document.getElementById('importHint');
+  if(ih) ih.textContent = store.imports.length
+    ? `取込済み: ${store.imports.length}レイヤ / ${store.refPoints.length}点（出力には含まれません）`
+    : '既知点・既設点をレイヤとして地図に重ねます（出力には含まれません）';
   updateLayerSummary(); updateStakeSummary(); updateBackupHint();
   const sh=document.getElementById('storageHint');
   if(sh) sh.textContent = state.saveError ? '⚠ 保存に失敗しています' : '保存方式・使用量・自動削除への耐性';
@@ -1807,6 +1913,7 @@ function openSettings(){
   document.getElementById('setNextRoute').value=store.settings.nextRoute;
   document.getElementById('setAvgSec').value=String(store.settings.avgSec??3);
   document.getElementById('setAccWarn').value=store.settings.accWarn??10;
+  document.getElementById('setCsvAttr').value=store.settings.csvAttr??'12,1.0,1,1      ';
   const sel=document.getElementById('setZone');
   sel.innerHTML=ZONES.map((z,i)=>`<option value="${i+1}" ${store.settings.zone===i+1?'selected':''}>第${i+1}系</option>`).join('');
   document.getElementById('setColorMode').value=store.settings.colorMode||'auto';
@@ -1819,6 +1926,7 @@ function saveSettings(){
   store.settings.avgSec=Math.max(0,parseInt(document.getElementById('setAvgSec').value)||0);
   const aw=parseFloat(document.getElementById('setAccWarn').value);
   store.settings.accWarn=(isFinite(aw)&&aw>=0)?aw:10;
+  store.settings.csvAttr=document.getElementById('setCsvAttr').value;
   store.settings.zone=parseInt(document.getElementById('setZone').value)||9;
   const cmPrev=store.settings.colorMode||'auto';
   store.settings.colorMode=document.getElementById('setColorMode').value;
@@ -1867,17 +1975,232 @@ function exportSimaDate(ds){
   saveSima(pointsOfDate(ds), `選点_${ds}.sim`, dateLabel(ds));
 }
 function exportSimaAll(){
-  closePanel('menuPanel');
+  closePanel('menuPanel'); closePanel('datePanel');
   saveSima(store.points, `選点_全件_${todayStr()}.sim`, '全件');
+}
+let exportFmt='sima';
+function setExportFmt(f){ exportFmt=f; renderDateExport(); }
+function renderDateExport(){
+  document.querySelectorAll('#fmtSeg .seg').forEach(b=>b.classList.toggle('on', b.dataset.fmt===exportFmt));
+  const csv = exportFmt==='csv';
+  const ext = csv?'csv':'sim';
+  const fn  = csv?'exportCsvDate':'exportSimaDate';
+  const dates=datesInUse(), today=todayStr();
+  document.getElementById('dateExportList').innerHTML =
+    (dates.length ? dates.map(ds=>
+      `<button class="menuItem" onclick="${fn}('${ds}')" style="${ds===today?'font-weight:bold;':''}">
+        ${csv?'📄':'💾'} ${dateLabel(ds)}<span class="sub">${pointsOfDate(ds).length}点　→ 選点_${ds}.${ext}</span></button>`
+    ).join('') : '<p style="color:#888;font-size:13px;">点がありません</p>')
+    + (store.points.length ? `<button class="menuItem" onclick="${csv?'exportCsvAll':'exportSimaAll'}()" style="border-top:2px solid #ddd;">
+        🗃 全件<span class="sub">${store.points.length}点　→ 選点_全件_${todayStr()}.${ext}</span></button>` : '');
+  document.getElementById('fmtNote').innerHTML = csv
+    ? '列は「点名, X（北）, Y（東）, Z, 属性, 杭種」です。属性列は設定で変更できます。文字コードはShift-JISです。'
+    : '座標データのみを出力します（路線は含みません）。文字コードはShift-JISです。';
 }
 function openDateExport(){
   closePanel('menuPanel');
-  const dates=datesInUse(), today=todayStr();
-  document.getElementById('dateExportList').innerHTML = dates.length ? dates.map(ds=>
-    `<button class="menuItem" onclick="exportSimaDate('${ds}')" style="${ds===today?'font-weight:bold;':''}">
-      💾 ${dateLabel(ds)}<span class="sub">${pointsOfDate(ds).length}点　→ 選点_${ds}.sim</span></button>`
-  ).join('') : '<p style="color:#888;font-size:13px;">点がありません</p>';
+  renderDateExport();
   openPanel('datePanel');
+}
+
+/* ================= CSV出力 =================
+   列: 点名, X(北), Y(東), Z, "属性", 杭種
+   小数は3桁で作り、末尾の0は落とす（例: 49079.720 → 49079.72）。
+   文字コードはSIMA出力と揃えてShift-JIS。 */
+function csvNum(v){
+  let n=+v; if(!isFinite(n)) n=0;
+  let t=n.toFixed(3);
+  if(t.indexOf('.')>=0) t=t.replace(/0+$/,'').replace(/\.$/,'');
+  return t==='-0' ? '0' : t;     // -0.0002 が「-0」と出るのを防ぐ
+}
+function csvCell(v){
+  const t=String(v==null?'':v);
+  return /[",\r\n]/.test(t) ? '"'+t.replace(/"/g,'""')+'"' : t;
+}
+function buildCsv(points){
+  const attr=(store.settings.csvAttr!==undefined?store.settings.csvAttr:'12,1.0,1,1      ');
+  return points.map(p=>{
+    const [X,Y]=pointToXY(p);                       // X=北, Y=東
+    const stake=(p.stake&&p.stake!=='<なし>')?p.stake:'';
+    return [csvCell(p.name), csvNum(X), csvNum(Y), csvNum(p.z||0), csvCell(attr), csvCell(stake)].join(',');
+  }).join('\r\n')+'\r\n';
+}
+function toSjis(text){
+  return new Uint8Array(Encoding.convert(Encoding.stringToCode(text),'SJIS','UNICODE'));
+}
+function saveCsv(points, fileName, label){
+  if(!points.length){ alert(`${label}の点がありません。`); return false; }
+  const dup=duplicateNames(points);
+  if(dup.length && !confirm(`出力する点の中に同じ点名があります。\n\n重複: ${dup.join('、')}\n\n受け取り側で取り違えの原因になります。このまま出力しますか?`)) return false;
+  download(new Blob([toSjis(buildCsv(points))],{type:'text/csv'}), fileName);
+  toast(`${label}（${points.length}点）をCSVで出力しました`);
+  return true;
+}
+function exportCsvToday(){
+  closePanel('menuPanel');
+  const ds=todayStr();
+  saveCsv(pointsOfDate(ds), `選点_${ds}.csv`, `本日分 ${dateLabel(ds)}`);
+}
+function exportCsvDate(ds){
+  closePanel('datePanel');
+  saveCsv(pointsOfDate(ds), `選点_${ds}.csv`, dateLabel(ds));
+}
+function exportCsvAll(){
+  closePanel('menuPanel'); closePanel('datePanel');
+  saveCsv(store.points, `選点_全件_${todayStr()}.csv`, '全件');
+}
+
+/* ================= SIMA / CSV の取込（参照専用レイヤ） ================= */
+function decodeText(buf){
+  const u8=new Uint8Array(buf);
+  // BOM付きUTF-8はそのまま、それ以外は自動判別（測量ソフトの出力はShift-JISが多い）
+  if(u8.length>=3 && u8[0]===0xEF && u8[1]===0xBB && u8[2]===0xBF)
+    return new TextDecoder('utf-8').decode(u8.subarray(3));
+  let enc='UNKNOWN';
+  try{ enc=Encoding.detect(u8)||'UNKNOWN'; }catch(e){}
+  if(enc==='UTF8'||enc==='ASCII') return new TextDecoder('utf-8').decode(u8);
+  try{ return Encoding.codeToString(Encoding.convert(u8,'UNICODE',enc==='UNKNOWN'?'SJIS':enc)); }
+  catch(e){ return new TextDecoder('utf-8').decode(u8); }
+}
+function splitCsvLine(line){          // 引用符つきフィールドに対応した簡易パーサ
+  const out=[]; let cur='', q=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(q){
+      if(c==='"'){ if(line[i+1]==='"'){ cur+='"'; i++; } else q=false; }
+      else cur+=c;
+    } else if(c==='"') q=true;
+    else if(c===','){ out.push(cur); cur=''; }
+    else cur+=c;
+  }
+  out.push(cur);
+  return out.map(v=>v.trim());
+}
+/* SIMAのA01: A01,点番号,点名,X(北),Y(東),Z, */
+function parseSimaText(text){
+  const pts=[];
+  for(const raw of text.split(/\r?\n/)){
+    const line=raw.trim();
+    if(!/^A01\s*,/i.test(line)) continue;
+    const f=splitCsvLine(line);
+    const name=(f[2]||'').trim();
+    const X=parseFloat(f[3]), Y=parseFloat(f[4]), Z=parseFloat(f[5]);
+    if(!isFinite(X)||!isFinite(Y)) continue;
+    pts.push({ name:name||String(pts.length+1), X, Y, z:isFinite(Z)?Z:0, stake:'', attr:'' });
+  }
+  return pts;
+}
+/* CSV: 点名,X(北),Y(東),Z,"属性",杭種 */
+function parseCsvText(text){
+  const pts=[];
+  for(const raw of text.split(/\r?\n/)){
+    const line=raw.replace(/^\uFEFF/,'').trim();
+    if(!line) continue;
+    const f=splitCsvLine(line);
+    if(f.length<3) continue;
+    const X=parseFloat(f[1]), Y=parseFloat(f[2]);
+    if(!isFinite(X)||!isFinite(Y)) continue;          // ヘッダ行などは自動的に飛ばされる
+    const Z=parseFloat(f[3]);
+    pts.push({ name:(f[0]||'').trim()||String(pts.length+1), X, Y,
+               z:isFinite(Z)?Z:0, attr:f[4]||'', stake:(f[5]||'').trim() });
+  }
+  return pts;
+}
+/* X(北),Y(東) → 画面座標系(x=東, y=北)。経緯度表示中は投影して合わせる */
+function xyToMapPoint(X,Y){
+  if(state.geographic){
+    try{ const ll=currentProj().inverse([Y,X]); return {x:ll[0], y:ll[1]}; }catch(e){ return {x:Y, y:X}; }
+  }
+  return {x:Y, y:X};
+}
+let pendingImport=null;
+document.getElementById('fileImport').addEventListener('change', async e=>{
+  const file=e.target.files[0]; if(!file) return;
+  e.target.value='';
+  try{
+    const text=decodeText(await file.arrayBuffer());
+    const isSima=/^\s*(G00|Z00|A00|A01)\s*,/im.test(text);
+    const rows=isSima?parseSimaText(text):parseCsvText(text);
+    if(!rows.length){
+      alert('座標を読み取れませんでした。\n\nSIMAは A01 行、CSVは「点名, X(北), Y(東), Z, 属性, 杭種」の並びを想定しています。\nファイル: '+file.name);
+      return;
+    }
+    pendingImport={ file, rows, src:isSima?'sima':'csv' };
+    showImportPreview();
+  }catch(err){ alert('取込に失敗しました: '+(err&&err.message||err)); }
+});
+function showImportPreview(){
+  const {file, rows, src}=pendingImport;
+  const xs=rows.map(r=>r.Y), ys=rows.map(r=>r.X);
+  const rng=(a)=>`${Math.min(...a).toFixed(1)} 〜 ${Math.max(...a).toFixed(1)}`;
+  const head=rows.slice(0,3).map(r=>
+    `<div class="listRow"><span style="flex:1">${esc(r.name)}</span>
+     <span class="coords">X:${r.X.toFixed(3)}<br>Y:${r.Y.toFixed(3)}</span>
+     <span class="coords">${esc(r.stake||'')}</span></div>`).join('');
+  let warn='';
+  const t=state.tiff;
+  if(t && !state.geographic){
+    const inside=rows.filter(r=>r.Y>=t.bbox[0]&&r.Y<=t.bbox[2]&&r.X>=t.bbox[1]&&r.X<=t.bbox[3]).length;
+    if(inside===0) warn=`<div class="noteBox" style="background:#fdecea;border-color:#f0b7b1;color:#8c1d18;">
+      ⚠ 読み込んだ座標が、開いている図面の範囲から完全に外れています。<br>
+      系番号の違い、またはX（北）とY（東）の並びが逆の可能性があります。取り込んでから位置を確認してください。</div>`;
+    else if(inside<rows.length) warn=`<div class="noteBox">${rows.length-inside}点が図面の範囲外です（図郭をまたぐ場合は問題ありません）。</div>`;
+  }
+  document.getElementById('importPreview').innerHTML =
+    `<div class="noteBox">ファイル: <b>${esc(file.name)}</b>（${src==='sima'?'SIMA形式':'CSV形式'}）<br>
+      読み取れた点: <b>${rows.length}点</b><br>
+      X（北）: ${rng(ys)}<br>Y（東）: ${rng(xs)}</div>`
+    + warn
+    + `<div style="font-size:12px;color:#666;margin:6px 0 2px;">先頭3点</div>${head}`;
+  document.getElementById('impName').value = file.name.replace(/\.[^.]+$/,'').slice(0,30);
+  openPanel('importPanel');
+}
+function commitImport(){
+  if(!pendingImport) return;
+  const {rows, src}=pendingImport;
+  const name=(document.getElementById('impName').value||'').trim()||'取込データ';
+  const imp={ id:uid(), name, src, ts:new Date().toISOString(),
+              color:IMPORT_COLORS[store.imports.length%IMPORT_COLORS.length] };
+  store.imports.push(imp);
+  rows.forEach(r=>{
+    const m=xyToMapPoint(r.X, r.Y);
+    store.refPoints.push({ id:uid(), impId:imp.id, name:r.name, x:m.x, y:m.y,
+                           z:r.z||0, stake:r.stake||'', attr:r.attr||'' });
+  });
+  store.layers.hiddenImports=(store.layers.hiddenImports||[]).filter(i=>i!==imp.id);
+  pendingImport=null;
+  save(); closePanel('importPanel'); closePanel('menuPanel'); updateListCount();
+  if(!state.tiff) fitToImport(imp.id); else draw();
+  toast(`「${name}」を ${rows.length}点 取り込みました`);
+}
+function fitToImport(id){
+  const pts=refPointsOf(id);
+  if(!pts.length){ draw(); return; }
+  const xs=pts.map(p=>p.x), ys=pts.map(p=>p.y);
+  const x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys);
+  state.view.cx=(x0+x1)/2; state.view.cy=(y0+y1)/2;
+  const w=Math.max(x1-x0,20), h=Math.max(y1-y0,20);
+  state.view.scale=clampScale(Math.min(W/w, H/h)*0.8);
+  state.follow=false; updateFollowBtn(); draw();
+}
+function delImport(id){
+  const imp=importById(id);
+  if(!imp) return;
+  const n=refPointsOf(id).length;
+  const ids=new Set(refPointsOf(id).map(p=>p.id));
+  const usedRoutes=store.routes.filter(r=>r.pointIds.some(i=>ids.has(i))).length;
+  if(!confirm(`取込レイヤ「${imp.name}」（${n}点）を削除しますか?`
+    +(usedRoutes?`\n※この点を含む路線 ${usedRoutes}本 も短くなるか削除されます。`:''))) return;
+  store.refPoints=store.refPoints.filter(p=>p.impId!==id);
+  store.imports=store.imports.filter(i=>i.id!==id);
+  store.routes.forEach(r=>r.pointIds=r.pointIds.filter(i=>!ids.has(i)));
+  store.routes=store.routes.filter(r=>r.pointIds.length>=2);
+  state.currentRoute=state.currentRoute.filter(i=>!ids.has(i));
+  store.layers.hiddenImports=(store.layers.hiddenImports||[]).filter(i=>i!==id);
+  save(); draw(); updateListCount();
+  if(document.getElementById('layerPanel').classList.contains('show')) openLayers();
+  if(document.getElementById('listPanel').classList.contains('show')) openList();
+  toast(`「${imp.name}」を削除しました`);
 }
 
 /* ================= JSONバックアップ ================= */
@@ -1925,7 +2248,7 @@ async function restoreSnapshot(id){
   try{
     await pushSnapshot(snapshotJson());            // 復元直前の状態も控えに残す
     const d=JSON.parse(rec.json);
-    store.points=[]; store.routes=[]; store.strokes=[];
+    store.points=[]; store.routes=[]; store.strokes=[]; store.imports=[]; store.refPoints=[];
     applyLoaded(d);
     stakeList();
     state.currentRoute=[]; ptUndo.length=0; ptRedo.length=0;
@@ -1943,6 +2266,7 @@ document.getElementById('fileJson').addEventListener('change', async e=>{
     if(!confirm(`現在のデータを読込内容（点${d.points.length}）で置き換えます。よろしいですか?`)) return;
     await pushSnapshot(snapshotJson());           // 上書き前の状態を控えに残す
     store.points=d.points; store.routes=d.routes||[]; store.strokes=d.strokes||[];
+    store.imports=d.imports||[]; store.refPoints=d.refPoints||[];
     // 端末ごとの設定（デバッグ用の擬似GPS・擬似日付）は引き継がない
     const incoming=Object.assign({},d.settings);
     delete incoming.mockDate; delete incoming.mockGps;
@@ -1959,14 +2283,14 @@ async function clearAll(){
   if(!confirm('全ての点・路線・メモ・設定を削除します。よろしいですか?')) return;
   if(!confirm('本当に削除しますか?（自動バックアップからは復元できます）')) return;
   await pushSnapshot(snapshotJson());             // 削除直前の状態を控えに残す
-  store.points=[]; store.routes=[]; store.strokes=[];
+  store.points=[]; store.routes=[]; store.strokes=[]; store.imports=[]; store.refPoints=[];
   const keep=store.settings;
   store.settings=Object.assign({}, DEFAULT_SETTINGS, {
-    zone:keep.zone, colorMode:keep.colorMode, avgSec:keep.avgSec, accWarn:keep.accWarn,
+    zone:keep.zone, colorMode:keep.colorMode, avgSec:keep.avgSec, accWarn:keep.accWarn, csvAttr:keep.csvAttr,
     stakes:DEFAULT_STAKES.map(s=>({...s})), stakesVer:2, stake:'<なし>',
     mockGps:keep.mockGps, mockDate:null, lastExport:null
   });
-  store.layers={hiddenDates:[],routes:true,memo:true,base:true};
+  store.layers={hiddenDates:[],routes:true,memo:true,base:true,hiddenImports:[]};
   state.currentRoute=[]; ptUndo.length=0; ptRedo.length=0;
   save(); closePanel('menuPanel'); updateMockLabel(); updateActionbar(); updateListCount(); draw();
   toast('全データを削除しました（自動バックアップから復元できます）');

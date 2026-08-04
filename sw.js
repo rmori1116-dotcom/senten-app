@@ -2,7 +2,7 @@
    senten-app.html と同じフォルダに置いてください。
    アプリ本体（HTML）をキャッシュし、圏外でも起動できるようにします。 */
 'use strict';
-const CACHE = 'senten-app-28fc0a4c7f0a';
+const CACHE = 'senten-app-bb499e2003cd';
 /* 置くファイル名（index.html / senten-app.html など）に依存しないよう、
    ここではフォルダのトップだけを控え、実際に開かれたURLはアプリ側から通知してもらう。 */
 const SHELL = ['./'];
